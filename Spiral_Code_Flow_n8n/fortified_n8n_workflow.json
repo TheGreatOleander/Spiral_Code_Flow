@@ -1,0 +1,277 @@
+{
+  "name": "🛡️ Fortified Spiral Forge Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Health Check and Initialization\nconst today = $now.format('YYYY-MM-DD');\nconst timestamp = $now.format('YYYY-MM-DD_HH-mm-ss');\n\nconsole.log(`🌀 [${timestamp}] Spiral Forge Workflow Starting`);\nconsole.log(`📅 Processing date: ${today}`);\n\n// Check if required directories exist\nconst fs = require('fs');\nconst path = require('path');\n\nconst basePath = process.env.SPIRAL_FORGE_PATH || '/home/user/spiral-forge';\nconst requiredDirs = [\n  path.join(basePath, 'prompts'),\n  path.join(basePath, 'episodes'),\n  path.join(basePath, 'logs'),\n  path.join(basePath, 'backups')\n];\n\ntry {\n  requiredDirs.forEach(dir => {\n    if (!fs.existsSync(dir)) {\n      fs.mkdirSync(dir, { recursive: true });\n      console.log(`📁 Created directory: ${dir}`);\n    }\n  });\n  \n  return [{\n    success: true,\n    today: today,\n    timestamp: timestamp,\n    basePath: basePath,\n    promptFile: path.join(basePath, 'prompts', `episode_${today}.txt`),\n    outputFile: path.join(basePath, 'episodes', `episode_${today}.txt`),\n    logFile: path.join(basePath, 'logs', `spiral_${today}.log`)\n  }];\n} catch (error) {\n  console.error('❌ Initialization failed:', error.message);\n  return [{\n    success: false,\n    error: error.message\n  }];\n}"
+      },
+      "id": "health-check",
+      "name": "Health Check & Init",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.success}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "success-check",
+      "name": "Health Check OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "command": "test -f \"{{$json.promptFile}}\"",
+        "options": {}
+      },
+      "id": "check-prompt-exists",
+      "name": "Check Prompt Exists",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "command": "bash \"{{$json.basePath}}/chatgpt-puller.sh\"",
+        "options": {
+          "timeout": 60
+        }
+      },
+      "id": "fallback-puller",
+      "name": "Fallback: ChatGPT Puller",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.code}}",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "prompt-exists-check",
+      "name": "Prompt Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "command": "bash \"{{$input.first().json.basePath}}/generate.sh\" \"{{$input.first().json.promptFile}}\"",
+        "options": {
+          "timeout": 600
+        }
+      },
+      "id": "run-generator",
+      "name": "🤖 Run Spiral Generator",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.code}}",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "generation-success-check",
+      "name": "Generation Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Success Logging and Cleanup\nconst inputData = $input.first().json;\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n\nconsole.log('✅ Spiral episode generated successfully!');\nconsole.log(`📊 Exit code: ${inputData.code}`);\nconsole.log(`📁 Output should be at: ${$('Health Check & Init').first().json.outputFile}`);\nconsole.log(`📅 Date: ${$('Health Check & Init').first().json.today}`);\n\n// Log final statistics\nconst fs = require('fs');\nconst outputFile = $('Health Check & Init').first().json.outputFile;\n\ntry {\n  if (fs.existsSync(outputFile)) {\n    const stats = fs.statSync(outputFile);\n    const content = fs.readFileSync(outputFile, 'utf8');\n    \n    console.log(`📏 File size: ${stats.size} bytes`);\n    console.log(`📝 Character count: ${content.length}`);\n    console.log(`🔤 Word count: ${content.split(/\\s+/).length}`);\n    console.log(`📈 Lines: ${content.split('\\n').length}`);\n    \n    return [{\n      success: true,\n      message: 'Episode generated successfully',\n      stats: {\n        size: stats.size,\n        characters: content.length,\n        words: content.split(/\\s+/).length,\n        lines: content.split('\\n').length\n      }\n    }];\n  } else {\n    console.log('⚠️  Output file not found, but command succeeded');\n    return [{\n      success: true,\n      message: 'Command succeeded but output file not found',\n      warning: true\n    }];\n  }\n} catch (error) {\n  console.log(`⚠️  Could not read output file: ${error.message}`);\n  return [{\n    success: true,\n    message: 'Generation completed with file access issues',\n    warning: true,\n    error: error.message\n  }];\n}"
+      },
+      "id": "success-logger",
+      "name": "✅ Success Logger",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Error Logging and Recovery\nconst inputData = $input.first().json;\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst healthData = $('Health Check & Init').first().json;\n\nconsole.error('❌ Spiral generation failed!');\nconsole.error(`💥 Exit code: ${inputData.code}`);\nconsole.error(`📋 Error output: ${inputData.stderr}`);\nconsole.error(`📅 Date: ${healthData.today}`);\n\n// Log error details\nconst fs = require('fs');\nconst errorLogFile = healthData.logFile.replace('.log', '_errors.log');\n\ntry {\n  const errorEntry = `[${timestamp}] WORKFLOW ERROR:\\n` +\n    `Exit Code: ${inputData.code}\\n` +\n    `STDERR: ${inputData.stderr}\\n` +\n    `STDOUT: ${inputData.stdout}\\n` +\n    `---\\n\\n`;\n  \n  fs.appendFileSync(errorLogFile, errorEntry);\n  console.log(`📝 Error logged to: ${errorLogFile}`);\n} catch (logError) {\n  console.error(`Failed to write error log: ${logError.message}`);\n}\n\n// Attempt recovery strategies\nconsole.log('🔄 Attempting recovery strategies...');\n\nreturn [{\n  success: false,\n  message: 'Generation failed, recovery needed',\n  exitCode: inputData.code,\n  stderr: inputData.stderr,\n  stdout: inputData.stdout,\n  recovery: {\n    suggestedActions: [\n      'Check LM Studio is running',\n      'Verify prompt file exists and has content',\n      'Check network connectivity',\n      'Review error logs for details'\n    ]\n  }\n}];"
+      },
+      "id": "error-logger",
+      "name": "❌ Error Logger",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1780, 420]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Critical Failure Handler\nconst inputData = $input.first().json;\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n\nconsole.error('🚨 CRITICAL FAILURE: Workflow could not initialize!');\nconsole.error(`💥 Error: ${inputData.error}`);\nconsole.error(`📅 Timestamp: ${timestamp}`);\n\n// Send alert (could be email, webhook, etc.)\nconsole.log('📧 Alert: Manual intervention required!');\n\nreturn [{\n  success: false,\n  critical: true,\n  message: 'Workflow initialization failed',\n  error: inputData.error,\n  timestamp: timestamp,\n  requiredAction: 'Manual intervention needed'\n}];"
+      },
+      "id": "critical-failure",
+      "name": "🚨 Critical Failure",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [680, 500]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Health Check & Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check & Init": {
+      "main": [
+        [
+          {
+            "node": "Health Check OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check OK?": {
+      "main": [
+        [
+          {
+            "node": "Check Prompt Exists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Critical Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Prompt Exists": {
+      "main": [
+        [
+          {
+            "node": "Prompt Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback: ChatGPT Puller": {
+      "main": [
+        [
+          {
+            "node": "Prompt Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt Available?": {
+      "main": [
+        [
+          {
+            "node": "🤖 Run Spiral Generator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback: ChatGPT Puller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 Run Spiral Generator": {
+      "main": [
+        [
+          {
+            "node": "Generation Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generation Success?": {
+      "main": [
+        [
+          {
+            "node": "✅ Success Logger",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "❌ Error Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "America/New_York",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "workflow_error_handler"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z",
+      "id": "spiral-forge",
+      "name": "spiral-forge"
+    }
+  ]
