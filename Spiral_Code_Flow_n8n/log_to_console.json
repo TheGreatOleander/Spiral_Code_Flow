@@ -1,0 +1,7 @@
+{
+  "name": "Log Output",
+  "type": "n8n-nodes-base.function",
+  "parameters": {
+    "functionCode": "console.log('✅ Spiral episode generated successfully:', $now.format('YYYY-MM-DD')); return [];"
+  }
+}
