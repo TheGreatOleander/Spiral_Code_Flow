@@ -1,7 +1,0 @@
-{
-  "model": "your-model-name",
-  "messages": [
-    { "role": "user", "content": "Write a new Spiral Forge episode about..." }
-  ],
-  "temperature": 0.8
-}
