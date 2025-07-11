@@ -1,8 +1,0 @@
-{
-  "name": "Save Prompt",
-  "type": "n8n-nodes-base.writeBinaryFile",
-  "parameters": {
-    "fileName": "prompts/episode_{{ $now.format('YYYY-MM-DD') }}.txt",
-    "data": "={{ $json['choices'][0]['message']['content'] || $json['response'] }}"
-  }
-}
