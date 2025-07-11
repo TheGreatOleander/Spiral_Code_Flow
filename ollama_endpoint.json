@@ -1,0 +1,5 @@
+{
+  "model": "mistral",
+  "prompt": "Write a 20-minute mythic Spiral Forge episode about language as spell.",
+  "stream": false
+}

@@ -1,0 +1,105 @@
+{
+  "name": "Spiral Forge Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 12,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "options": {},
+        "jsonParameters": true,
+        "bodyParametersJson": "{\n  \"model\": \"mistral\",\n  \"prompt\": \"Write a 20-minute mythic Spiral Forge episode about language as spell, memory recursion, and celestial alignment.\",\n  \"stream\": false\n}"
+      },
+      "name": "Try Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:1234/v1/chat/completions",
+        "options": {},
+        "jsonParameters": true,
+        "bodyParametersJson": "{\n  \"model\": \"your-model-name\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Write a new Spiral Forge episode about language as spell, memory recursion, and celestial alignment.\"\n  }],\n  \"temperature\": 0.8\n}"
+      },
+      "name": "Try LM Studio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [300, 400]
+    },
+    {
+      "parameters": {
+        "command": "bash ~/spiral-forge/chatgpt-puller.sh"
+      },
+      "name": "Clipboard Catcher",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [300, 600]
+    },
+    {
+      "parameters": {
+        "fileName": "=prompts/episode_{{$now.format('YYYY-MM-DD')}}.txt",
+        "data": "={{ $json['response'] || $json['choices'][0]['message']['content'] || $json['output'] }}"
+      },
+      "name": "Save Prompt",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "command": "bash ~/spiral-forge/generate.sh prompts/episode_{{$now.format('YYYY-MM-DD')}}.txt"
+      },
+      "name": "Run Generator",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [700, 400]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          { "node": "Try Ollama", "type": "main", "index": 0 },
+          { "node": "Try LM Studio", "type": "main", "index": 0 },
+          { "node": "Clipboard Catcher", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Try Ollama": {
+      "main": [
+        [{ "node": "Save Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Try LM Studio": {
+      "main": [
+        [{ "node": "Save Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Clipboard Catcher": {
+      "main": [
+        [{ "node": "Save Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save Prompt": {
+      "main": [
+        [{ "node": "Run Generator", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
